@@ -9,6 +9,9 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
+    # No app icon yet; XcodeGen defaults this to "AppIcon" and actool fails
+    # when the asset catalog has no matching set.
+    ASSETCATALOG_COMPILER_APPICON_NAME: ""
 
 targets:
   TailBrowser:
