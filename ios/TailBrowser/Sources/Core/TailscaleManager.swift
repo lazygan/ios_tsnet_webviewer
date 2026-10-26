@@ -81,12 +81,12 @@ final class TailscaleManager: ObservableObject {
 
         Task {
             let errorMessage: String? = await Task.detached(priority: .userInitiated) {
-                do {
-                    try TailbridgeStart(stateDir, host, authKey, control, Self.preferredProxyPort)
+                var error: NSError?
+                let ok = TailbridgeStart(stateDir, host, authKey, control, Self.preferredProxyPort, &error)
+                if ok {
                     return nil
-                } catch {
-                    return error.localizedDescription
                 }
+                return error?.localizedDescription ?? "TailbridgeStart failed"
             }.value
 
             if let errorMessage {
@@ -131,7 +131,8 @@ final class TailscaleManager: ObservableObject {
         let stateDir = Self.stateDirectory()
         stop()
         Task.detached(priority: .utility) {
-            try? TailbridgeResetIdentity(stateDir)
+            var error: NSError?
+            _ = TailbridgeResetIdentity(stateDir, &error)
         }
         Keychain.delete()
         authKeyStored = false

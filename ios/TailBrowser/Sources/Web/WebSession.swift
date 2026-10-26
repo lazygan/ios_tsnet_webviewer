@@ -13,7 +13,7 @@ final class WebSession {
         let store = WKWebsiteDataStore(forIdentifier: identifier)
         let port = NWEndpoint.Port(rawValue: UInt16(clamping: proxyPort)) ?? .any
         let endpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: port)
-        let proxy = ProxyConfiguration(socksv5Proxy: endpoint)
+        var proxy = ProxyConfiguration(socksv5Proxy: endpoint)
         proxy.allowFailover = false
         store.proxyConfigurations = [proxy]
 
