@@ -27,10 +27,11 @@ final class BookmarkStore: ObservableObject {
     func add(name: String, host: String, port: Int) {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayName = trimmedName.isEmpty ? host : trimmedName
-        guard !bookmarks.contains(where: { $0.host == host && $0.port == port }) else {
-            return
+        if let index = bookmarks.firstIndex(where: { $0.host == host && $0.port == port }) {
+            bookmarks[index].name = displayName
+        } else {
+            bookmarks.append(Bookmark(name: displayName, host: host, port: port))
         }
-        bookmarks.append(Bookmark(name: displayName, host: host, port: port))
         persist()
     }
 

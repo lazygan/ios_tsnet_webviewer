@@ -10,6 +10,7 @@ struct RootView: View {
     @State private var showDiagnostics = false
     @State private var showManualEntry = false
     @State private var showPortEntry = false
+    @State private var showQuickAdd = false
     @State private var safariItem: SafariItem?
     @State private var browserTarget: BrowserTarget?
     @State private var pendingPeer: PeerInfo?
@@ -22,9 +23,7 @@ struct RootView: View {
                 if manager.state.isRunning {
                     machinesSection
                 }
-                if !bookmarks.bookmarks.isEmpty {
-                    bookmarksSection
-                }
+                quickConnectSection
                 if !manager.state.isRunning {
                     authKeySection
                 }
@@ -68,6 +67,11 @@ struct RootView: View {
                     open(host: host, port: port, rememberAs: pendingPeer?.hostName)
                 }
                 .id(portEntryID)
+            }
+            .sheet(isPresented: $showQuickAdd) {
+                QuickConnectEntryView { name, host, port in
+                    bookmarks.add(name: name, host: host, port: port)
+                }
             }
             .sheet(item: $safariItem) { item in
                 SafariView(url: item.url)
@@ -172,6 +176,7 @@ struct RootView: View {
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -184,8 +189,13 @@ struct RootView: View {
         }
     }
 
-    private var bookmarksSection: some View {
-        Section("收藏") {
+    private var quickConnectSection: some View {
+        Section {
+            if bookmarks.bookmarks.isEmpty {
+                Text("还没有快捷连接，点右上角“添加”保存常用地址。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             ForEach(bookmarks.bookmarks) { bookmark in
                 Button {
                     if let url = bookmark.url {
@@ -205,10 +215,30 @@ struct RootView: View {
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .disabled(!manager.state.isRunning)
             }
             .onDelete(perform: bookmarks.remove)
+            if !manager.state.isRunning && !bookmarks.bookmarks.isEmpty {
+                Text("连接 Tailscale 后可用")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            HStack {
+                Text("快速连接")
+                Spacer()
+                Button {
+                    showQuickAdd = true
+                } label: {
+                    Image(systemName: "plus")
+                        .imageScale(.medium)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("添加快捷连接")
+            }
         }
     }
 
