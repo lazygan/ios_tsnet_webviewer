@@ -100,7 +100,7 @@ struct BrowserView: View {
                     model: model,
                     onEdgeExit: { dismiss() }
                 )
-                .ignoresSafeArea(edges: .bottom)
+                .ignoresSafeArea()
             } else {
                 ContentUnavailableView(
                     "无法打开",
@@ -112,6 +112,7 @@ struct BrowserView: View {
 
             if model.isLoading && model.progress < 1 {
                 loadingBar
+                    .ignoresSafeArea(edges: .top)
             }
         }
         .background(Color(uiColor: .systemBackground))
@@ -132,6 +133,9 @@ struct BrowserView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: model.errorMessage)
+        // Fill the whole screen and drop the status bar (time/battery) so there
+        // is no system-colored strip above the page.
+        .statusBarHidden(true)
         .onAppear {
             model.loadInitialIfNeeded()
         }

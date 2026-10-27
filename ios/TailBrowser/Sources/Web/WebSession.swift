@@ -22,6 +22,9 @@ final class WebSession {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        // The browser is presented full screen; let the page extend under the
+        // notch and home indicator instead of being inset by the safe area.
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         // The left-edge swipe is reserved for dismissing the full-screen browser.
         webView.allowsBackForwardNavigationGestures = false
         webView.isInspectable = true
