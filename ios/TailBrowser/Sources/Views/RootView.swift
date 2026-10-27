@@ -74,7 +74,16 @@ struct RootView: View {
                 BrowserView(target: target, proxyPort: manager.proxyPort)
             }
             .onChange(of: scenePhase) { _, phase in
-                manager.setForeground(phase == .active)
+                switch phase {
+                case .active:
+                    manager.setForeground(true)
+                case .background:
+                    manager.setForeground(false)
+                case .inactive:
+                    break
+                @unknown default:
+                    break
+                }
             }
             .onAppear {
                 manager.setForeground(scenePhase == .active)

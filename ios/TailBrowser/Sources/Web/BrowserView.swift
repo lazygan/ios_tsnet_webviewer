@@ -12,6 +12,7 @@ final class BrowserModel: ObservableObject {
     @Published var errorMessage: String?
 
     private var progressObservation: NSKeyValueObservation?
+    private var proxyReadyObserver: NSObjectProtocol?
     private var errorGeneration = 0
 
     init(target: BrowserTarget, proxyPort: Int) {
@@ -29,10 +30,33 @@ final class BrowserModel: ObservableObject {
                     self?.progress = value
                 }
             }
+            self.proxyReadyObserver = NotificationCenter.default.addObserver(
+                forName: .tailwebProxyReady,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.reloadAfterReconnect()
+            }
         } else {
             self.session = nil
             self.unavailableReason = "Tailscale 未连接或本地代理未启动。"
         }
+    }
+
+    deinit {
+        if let proxyReadyObserver {
+            NotificationCenter.default.removeObserver(proxyReadyObserver)
+        }
+    }
+
+    /// After the app returns from the background, tsnet is restarted and any
+    /// page connections made against the old node are dead. Reload the page
+    /// so it goes back through the fresh proxy.
+    private func reloadAfterReconnect() {
+        guard let session, session.webView.url != nil else {
+            return
+        }
+        session.webView.reload()
     }
 
     func loadInitialIfNeeded() {

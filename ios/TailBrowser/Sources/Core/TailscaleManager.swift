@@ -47,6 +47,8 @@ final class TailscaleManager: ObservableObject {
 
     private var pollTask: Task<Void, Never>?
     private var foreground = true
+    private var backgroundedAt: Date?
+    private var isStarting = false
 
     init() {
         let defaults = UserDefaults.standard
@@ -62,15 +64,27 @@ final class TailscaleManager: ObservableObject {
     func setForeground(_ isForeground: Bool) {
         foreground = isForeground
         if isForeground {
+            let away = backgroundedAt.map { Date().timeIntervalSince($0) } ?? 0
+            backgroundedAt = nil
             beginPolling()
             Task { await refreshOnce() }
+            // iOS suspends the process in the background; the tsnet UDP
+            // mappings are usually dead when we return. Rebind them.
+            if away >= 3, state.isRunning {
+                start()
+            }
         } else {
+            backgroundedAt = Date()
             pollTask?.cancel()
             pollTask = nil
         }
     }
 
     func start() {
+        guard !isStarting else {
+            return
+        }
+        isStarting = true
         let authKey = Keychain.load() ?? ""
         let stateDir = Self.stateDirectory()
         let host = hostname.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -89,6 +103,7 @@ final class TailscaleManager: ObservableObject {
                 return error?.localizedDescription ?? "TailbridgeStart failed"
             }.value
 
+            self.isStarting = false
             if let errorMessage {
                 self.state = .failed(errorMessage)
                 self.lastError = errorMessage
@@ -102,6 +117,7 @@ final class TailscaleManager: ObservableObject {
     func stop() {
         pollTask?.cancel()
         pollTask = nil
+        isStarting = false
         state = .stopped
         peers = []
         selfPeer = nil
@@ -202,7 +218,11 @@ final class TailscaleManager: ObservableObject {
             }
         }
         if state != nextState {
+            let wasRunning = state.isRunning
             state = nextState
+            if nextState.isRunning && !wasRunning {
+                NotificationCenter.default.post(name: .tailwebProxyReady, object: nil)
+            }
         }
     }
 
@@ -254,4 +274,10 @@ final class TailscaleManager: ObservableObject {
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.path
     }
+}
+
+extension Notification.Name {
+    /// Posted when a tsnet node transitions to Running, including automatic
+    /// recovery after the app returns from the background.
+    static let tailwebProxyReady = Notification.Name("tailweb.proxyReady")
 }
