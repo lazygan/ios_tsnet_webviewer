@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import WebKit
 
 final class BrowserModel: ObservableObject {
@@ -6,18 +7,28 @@ final class BrowserModel: ObservableObject {
     let session: WebSession?
     let unavailableReason: String?
 
-    @Published var addressText: String
-    @Published var errorMessage: String?
     @Published var isLoading = false
+    @Published var progress: Double = 0
+    @Published var errorMessage: String?
 
-    private var didLoadInitial = false
+    private var progressObservation: NSKeyValueObservation?
+    private var errorGeneration = 0
 
     init(target: BrowserTarget, proxyPort: Int) {
         self.target = target
-        self.addressText = target.url.absoluteString
         if proxyPort > 0 {
-            self.session = WebSession(proxyPort: proxyPort)
+            let session = WebSession(proxyPort: proxyPort)
+            self.session = session
             self.unavailableReason = nil
+            self.progressObservation = session.webView.observe(
+                \.estimatedProgress,
+                options: [.initial, .new]
+            ) { [weak self] webView, _ in
+                let value = webView.estimatedProgress
+                DispatchQueue.main.async {
+                    self?.progress = value
+                }
+            }
         } else {
             self.session = nil
             self.unavailableReason = "Tailscale 未连接或本地代理未启动。"
@@ -25,42 +36,32 @@ final class BrowserModel: ObservableObject {
     }
 
     func loadInitialIfNeeded() {
-        guard !didLoadInitial, let session else {
+        guard let session, session.webView.url == nil else {
             return
         }
-        didLoadInitial = true
         session.webView.load(URLRequest(url: target.url))
     }
 
-    func submitAddress() {
-        guard let session else {
-            return
+    func presentError(_ message: String) {
+        errorGeneration += 1
+        let generation = errorGeneration
+        errorMessage = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            guard let self, self.errorGeneration == generation else {
+                return
+            }
+            self.errorMessage = nil
         }
-        guard let url = TailWebURL.normalize(addressText) else {
-            errorMessage = "地址格式无效"
-            return
-        }
-        addressText = url.absoluteString
+    }
+
+    func dismissError() {
+        errorGeneration += 1
         errorMessage = nil
-        session.webView.load(URLRequest(url: url))
-    }
-
-    func goBack() {
-        session?.webView.goBack()
-    }
-
-    func goForward() {
-        session?.webView.goForward()
-    }
-
-    func reload() {
-        session?.webView.reload()
     }
 }
 
 struct BrowserView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var bookmarks: BookmarkStore
     @StateObject private var model: BrowserModel
 
     init(target: BrowserTarget, proxyPort: Int) {
@@ -68,147 +69,132 @@ struct BrowserView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                if let session = model.session {
-                    WebViewContainer(webView: session.webView, model: model)
-                        .overlay(alignment: .top) {
-                            if model.isLoading {
-                                ProgressView()
-                                    .padding(6)
-                                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                                    .padding(.top, 8)
-                            }
-                        }
-                } else {
-                    ContentUnavailableView(
-                        "无法打开",
-                        systemImage: "wifi.slash",
-                        description: Text(model.unavailableReason ?? "代理未就绪")
-                    )
-                }
+        ZStack(alignment: .top) {
+            if let session = model.session {
+                WebViewContainer(
+                    webView: session.webView,
+                    model: model,
+                    onEdgeExit: { dismiss() }
+                )
+                .ignoresSafeArea(edges: .bottom)
+            } else {
+                ContentUnavailableView(
+                    "无法打开",
+                    systemImage: "wifi.slash",
+                    description: Text(model.unavailableReason ?? "代理未就绪")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
 
-                if let message = model.errorMessage {
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .background(.thinMaterial)
-                }
-
-                addressBar
+            if model.isLoading && model.progress < 1 {
+                loadingBar
             }
-            .navigationTitle(model.target.host)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("关闭") {
-                        dismiss()
+        }
+        .background(Color(uiColor: .systemBackground))
+        .overlay(alignment: .bottom) {
+            if let message = model.errorMessage {
+                Text(message)
+                    .font(.footnote)
+                    .multilineTextAlignment(.leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 24)
+                    .transition(.opacity)
+                    .onTapGesture {
+                        model.dismissError()
                     }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        if !bookmarks.isBookmarked(host: model.target.host, port: model.target.port) {
-                            bookmarks.add(
-                                name: model.target.host,
-                                host: model.target.host,
-                                port: model.target.port
-                            )
-                        }
-                    } label: {
-                        Image(
-                            systemName: bookmarks.isBookmarked(
-                                host: model.target.host,
-                                port: model.target.port
-                            ) ? "star.fill" : "star"
-                        )
-                    }
-                }
-                ToolbarItemGroup(placement: .bottomBar) {
-                    Button {
-                        model.goBack()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    Button {
-                        model.goForward()
-                    } label: {
-                        Image(systemName: "chevron.right")
-                    }
-                    Spacer()
-                    Button {
-                        model.reload()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                }
             }
-            .onAppear {
-                model.loadInitialIfNeeded()
-            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: model.errorMessage)
+        .onAppear {
+            model.loadInitialIfNeeded()
         }
     }
 
-    private var addressBar: some View {
-        HStack(spacing: 8) {
-            TextField("主机:端口 或完整 URL", text: $model.addressText)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit {
-                    model.submitAddress()
-                }
-            Button {
-                model.submitAddress()
-            } label: {
-                Image(systemName: "arrow.right.circle.fill")
-                    .font(.title2)
+    private var loadingBar: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(Color.accentColor.opacity(0.15))
+                Rectangle()
+                    .fill(Color.accentColor)
+                    .frame(width: geo.size.width * max(model.progress, 0.03))
+                    .animation(.linear(duration: 0.2), value: model.progress)
             }
         }
-        .padding(8)
-        .background(.bar)
+        .frame(height: 2)
+        .allowsHitTesting(false)
     }
 }
 
 private struct WebViewContainer: UIViewRepresentable {
     let webView: WKWebView
     let model: BrowserModel
+    let onEdgeExit: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(model: model)
+        Coordinator(model: model, onEdgeExit: onEdgeExit)
     }
 
     func makeUIView(context: Context) -> WKWebView {
         webView.navigationDelegate = context.coordinator
+
+        if !context.coordinator.didInstallExitGesture {
+            let edge = UIScreenEdgePanGestureRecognizer(
+                target: context.coordinator,
+                action: #selector(Coordinator.handleEdgePan(_:))
+            )
+            edge.edges = .left
+            edge.delegate = context.coordinator
+            edge.cancelsTouchesInView = false
+            webView.addGestureRecognizer(edge)
+            context.coordinator.didInstallExitGesture = true
+        }
+
         return webView
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, UIGestureRecognizerDelegate {
         private let model: BrowserModel
+        private let onEdgeExit: () -> Void
+        var didInstallExitGesture = false
 
-        init(model: BrowserModel) {
+        init(model: BrowserModel, onEdgeExit: @escaping () -> Void) {
             self.model = model
+            self.onEdgeExit = onEdgeExit
+        }
+
+        @objc func handleEdgePan(_ gesture: UIScreenEdgePanGestureRecognizer) {
+            guard gesture.state == .ended else {
+                return
+            }
+            if gesture.translation(in: gesture.view).x > 60 {
+                onEdgeExit()
+            }
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             model.isLoading = true
-            model.errorMessage = nil
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             model.isLoading = false
-            if let url = webView.url {
-                model.addressText = url.absoluteString
-            }
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             model.isLoading = false
-            model.errorMessage = friendly(error)
+            model.presentError(friendly(error))
         }
 
         func webView(
@@ -217,7 +203,7 @@ private struct WebViewContainer: UIViewRepresentable {
             withError error: Error
         ) {
             model.isLoading = false
-            model.errorMessage = friendly(error)
+            model.presentError(friendly(error))
         }
 
         private func friendly(_ error: Error) -> String {

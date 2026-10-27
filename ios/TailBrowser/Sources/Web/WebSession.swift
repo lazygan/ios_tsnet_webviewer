@@ -22,7 +22,8 @@ final class WebSession {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.allowsBackForwardNavigationGestures = true
+        // The left-edge swipe is reserved for dismissing the full-screen browser.
+        webView.allowsBackForwardNavigationGestures = false
         webView.isInspectable = true
         self.webView = webView
     }
