@@ -2,7 +2,7 @@
 
 iOS 上的 Tailscale 浏览器：在 App 进程内运行用户态 Tailscale 节点（`tsnet`），通过本地 SOCKS5 代理驱动 `WKWebView`，访问 tailnet 内部的 HTTP 服务。
 
-当前状态：**Phase 0 骨架**。核心链路已实现，尚未在真机/CI 上验证（见 `docs/PHASE0.md`）。
+当前状态：**Phase 0**。核心链路已实现，CI 出包与免费账号侧载已打通（iPASide）；真机冒烟测试进行中，见 `docs/PHASE0.md`。
 
 ## 架构
 
@@ -39,7 +39,7 @@ docs/               Phase 0 清单、工具链、侧载说明
 
 1. 推送代码或在 Actions 中手动触发 `ios-unsigned`。
 2. 下载 artifact `TailBrowser-unsigned-<sha>.ipa`。
-3. 用 AltStore 或 Sideloadly 配合免费 Apple ID 签名安装，详见 `docs/SIDELOAD.md`。
+3. 用 iPASide（推荐，Sideloadly 当前受 Apple `-80046` 限制）配合免费 Apple ID 签名安装，详见 `docs/SIDELOAD.md`。
 
 Go 部分可以在 Windows 本地验证：
 

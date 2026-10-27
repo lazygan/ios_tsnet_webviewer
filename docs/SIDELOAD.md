@@ -8,7 +8,24 @@
 - 一个免费 Apple ID（建议使用专门的测试账号）。
 - Windows 上安装 iTunes 和 iCloud（AltStore 要求使用 Apple 官网版本，不要用 Microsoft Store 版）。
 
+## 方案零：iPASide（当前推荐，Windows）
+
+2026-10 起 Apple 收紧第三方 anisette 登录，Sideloadly 常报
+`Login failed (-80046): This action cannot be completed at this time.`。
+本项目已验证用 iPASide 1.2.12 可以完成签名安装：
+
+1. 安装并启动 iPASide，用 Apple ID 登录（建议专用测试号）。
+2. USB 连接 iPhone 并信任电脑。
+3. 拖入 `TailBrowser-unsigned-<sha>.ipa`，开始签名安装。
+4. 安装完成后在 设置 → 通用 → VPN 与设备管理 中信任开发者证书。
+5. 证书 7 天有效，到期后用同一工具覆盖安装即可（数据保留）。
+
+注意：出现 `-80046` 时**不要连续重试**，可能触发 `-20209` 账号临时锁定；
+隔几小时再试，或更换 Apple ID。实测 1.2.12 在 Windows 上可正常登录和安装。
+
 ## 方案一：Sideloadly（USB，手动）
+
+> 当前在免费账号上大概率遇到 `-80046`，优先使用方案零。
 
 1. 安装 Sideloadly 和 Apple 设备驱动（iTunes）。
 2. 连接 iPhone，信任电脑。
