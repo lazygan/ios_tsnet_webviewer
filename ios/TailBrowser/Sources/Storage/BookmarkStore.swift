@@ -35,6 +35,17 @@ final class BookmarkStore: ObservableObject {
         persist()
     }
 
+    func update(id: UUID, name: String, host: String, port: Int) {
+        guard let index = bookmarks.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        bookmarks[index].name = trimmedName.isEmpty ? host : trimmedName
+        bookmarks[index].host = host
+        bookmarks[index].port = port
+        persist()
+    }
+
     func remove(at offsets: IndexSet) {
         for index in offsets.sorted(by: >) where bookmarks.indices.contains(index) {
             bookmarks.remove(at: index)
