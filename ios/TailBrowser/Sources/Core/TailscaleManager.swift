@@ -49,6 +49,7 @@ final class TailscaleManager: ObservableObject {
     private var foreground = true
     private var backgroundedAt: Date?
     private var isStarting = false
+    private var lastLogFetch = Date.distantPast
 
     init() {
         let defaults = UserDefaults.standard
@@ -61,16 +62,17 @@ final class TailscaleManager: ObservableObject {
         TailbridgeVersion()
     }
 
-    func setForeground(_ isForeground: Bool) {
+    func setForeground(_ isForeground: Bool, connectionKeptAlive: Bool = false) {
         foreground = isForeground
         if isForeground {
             let away = backgroundedAt.map { Date().timeIntervalSince($0) } ?? 0
             backgroundedAt = nil
             beginPolling()
             Task { await refreshOnce() }
-            // iOS suspends the process in the background; the tsnet UDP
-            // mappings are usually dead when we return. Rebind them.
-            if away >= 3, state.isRunning {
+            // Without the background audio keep-alive iOS suspends the process
+            // and the tsnet UDP mappings usually die. If audio kept us alive
+            // the node never stopped, so leave it untouched.
+            if away >= 3, state.isRunning, !connectionKeptAlive {
                 start()
             }
         } else {
@@ -162,7 +164,15 @@ final class TailscaleManager: ObservableObject {
                     return
                 }
                 await self.refreshOnce()
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                // Poll quickly while the node is coming up so recovery after
+                // the background finishes as soon as tsnet reports Running.
+                let interval: UInt64
+                if case .starting = self.state {
+                    interval = 250_000_000
+                } else {
+                    interval = 1_000_000_000
+                }
+                try? await Task.sleep(nanoseconds: interval)
             }
         }
     }
@@ -171,9 +181,16 @@ final class TailscaleManager: ObservableObject {
         let json = await Task.detached(priority: .utility) {
             TailbridgeStatusJSON()
         }.value
-        let logText = await Task.detached(priority: .utility) {
-            TailbridgeLogs()
-        }.value
+
+        // The log buffer is large and only feeds diagnostics; refresh it at a
+        // lower rate than the status so fast polling stays cheap.
+        var logText = logs
+        if Date().timeIntervalSince(lastLogFetch) >= 2 {
+            logText = await Task.detached(priority: .utility) {
+                TailbridgeLogs()
+            }.value
+            lastLogFetch = Date()
+        }
 
         guard let data = json.data(using: .utf8),
               let status = try? JSONDecoder().decode(BridgeStatus.self, from: data) else {

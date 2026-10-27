@@ -3,6 +3,7 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject private var manager: TailscaleManager
     @EnvironmentObject private var bookmarks: BookmarkStore
+    @EnvironmentObject private var keepAlive: BackgroundKeepAlive
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var keyInput = ""
@@ -83,7 +84,12 @@ struct RootView: View {
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
                 case .active:
-                    manager.setForeground(true)
+                    // Check before restarting the loop: if audio was not
+                    // actually running, the process was suspended and tsnet
+                    // needs a fresh bind.
+                    let keptAlive = keepAlive.isPlaying
+                    keepAlive.ensurePlaying()
+                    manager.setForeground(true, connectionKeptAlive: keptAlive)
                 case .background:
                     manager.setForeground(false)
                 case .inactive:
@@ -93,7 +99,9 @@ struct RootView: View {
                 }
             }
             .onAppear {
-                manager.setForeground(scenePhase == .active)
+                let keptAlive = keepAlive.isPlaying
+                keepAlive.ensurePlaying()
+                manager.setForeground(scenePhase == .active, connectionKeptAlive: keptAlive)
             }
         }
     }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var manager: TailscaleManager
+    @EnvironmentObject private var keepAlive: BackgroundKeepAlive
     @Environment(\.dismiss) private var dismiss
     @State private var confirmReset = false
 
@@ -31,6 +32,12 @@ struct SettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+                }
+
+                Section {
+                    Toggle("锁屏后保持连接", isOn: $keepAlive.enabled)
+                } footer: {
+                    Text("通过循环播放静音音频让 App 在后台保持运行，Tailscale 连接不会因锁屏断开。会增加耗电。")
                 }
 
                 Section {
