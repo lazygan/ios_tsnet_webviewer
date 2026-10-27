@@ -63,8 +63,11 @@ struct RootView: View {
                     initialHost: pendingPeer?.primaryIP ?? pendingPeer?.hostName ?? "",
                     initialPort: pendingPort
                 ) { host, port in
-                    open(host: host, port: port)
+                    // Remember under the peer's stable hostname so the value is
+                    // found again even though the form is prefilled with its IP.
+                    open(host: host, port: port, rememberAs: pendingPeer?.hostName)
                 }
+                .id(portEntryID)
             }
             .sheet(item: $safariItem) { item in
                 SafariView(url: item.url)
@@ -148,7 +151,9 @@ struct RootView: View {
             ForEach(manager.peers) { peer in
                 Button {
                     pendingPeer = peer
-                    pendingPort = bookmarks.lastPort(for: peer.hostName) ?? 80
+                    pendingPort = bookmarks.lastPort(for: peer.hostName)
+                        ?? peer.primaryIP.flatMap { bookmarks.lastPort(for: $0) }
+                        ?? 80
                     showPortEntry = true
                 } label: {
                     HStack(spacing: 10) {
@@ -246,11 +251,19 @@ struct RootView: View {
         }
     }
 
-    private func open(host: String, port: Int) {
+    private var portEntryID: String {
+        "\(pendingPeer?.id ?? "manual")-\(pendingPort)"
+    }
+
+    private func open(host: String, port: Int, rememberAs memoryKey: String? = nil) {
         guard let url = TailWebURL.make(host: host, port: port) else {
             return
         }
-        bookmarks.remember(host: host, port: port)
+        bookmarks.remember(host: memoryKey ?? host, port: port)
+        if let memoryKey, memoryKey != host {
+            // Also keep the literal address the user opened, for manual entry.
+            bookmarks.remember(host: host, port: port)
+        }
         browserTarget = BrowserTarget(host: host, port: port, url: url)
     }
 
